@@ -1,4 +1,6 @@
-﻿$ErrorActionPreference = "SilentlyContinue"
+﻿$VPN_BYPASSED_IPS = "189.126.135.50,181.41.180.91,181.41.180.123"
+
+$ErrorActionPreference = "SilentlyContinue"
 
 function Write-LogMessage {
     param (
@@ -207,7 +209,20 @@ function Get-PublicIPAddresses {
     return $publicAddresses
 }
 
+function Get-DefaultGateway {
+    $routes = Get-NetRoute -AddressFamily IPv4
+    $defaultRoute = $routes | Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' }
+    
+    if ($defaultRoute) {
+        return $defaultRoute.NextHop
+    }
+    
+    return $null
+}
 
+$defaultGateway = Get-DefaultGateway
+
+$permitedList = $VPN_BYPASSED_IPS.Split(",")
 
 $localEth = Get-IPV4-Info "Ethernet"
 $localWifi = Get-IPV4-Info "Wi-Fi"
@@ -224,16 +239,22 @@ else {
 # Remover IPs Publicos 
 
 $addresses = Get-NetworkAddresses  $local.IfaceId
-$publicIPs = Get-PublicIPAddresses -Addresses $addresses
+#$publicIPs = Get-PublicIPAddresses -Addresses $addresses
 
-Write-LogMessage -Message "Removendo Rotas para IPs Publicos..."
+Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
 
-foreach ($publicIP in $publicIPs) {
-    Write-LogMessage -Message "Removendo Rotas para $publicIP"
-    route delete $publicIP | Out-Null
+# foreach ($publicIP in $publicIPs) {
+#     Write-LogMessage -Message "Removendo Rotas para $publicIP"
+#     route delete $publicIP | Out-Null
+# }
+
+foreach ($ipAddress in $permitedList) {
+    Write-LogMessage -Message "Atualizando Rotas para $ipAddress"
+    route delete $ipAddress | Out-Null
+    route ADD $ipAddress MASK 255.255.255.255 $defaultGateway METRIC 1 IF $local.IfaceId 
 }
 
-Write-LogMessage -Message "Rotas removidas!"
+Write-LogMessage -Message "Rotas atualizadas!"
 
 
 # Ajusta Rede Local
