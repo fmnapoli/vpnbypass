@@ -1,7 +1,13 @@
-﻿$VPN_BYPASSED_IPS = "189.126.135.50,181.41.180.91,181.41.180.123,181.41.180.113"
+﻿$VPN_BYPASSED_IPS = ""
 
-if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))){
-	$VPN_BYPASSED_IPS = $VPN_BYPASSED_IPS + ",$env:VPN_BYPASSED_IPS"
+$sep = ","
+
+if (([string]::IsNullOrEmpty($VPN_BYPASSED_IPS))) {
+    $sep = ""
+}
+
+if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
+    $VPN_BYPASSED_IPS = $VPN_BYPASSED_IPS + "$sep$env:VPN_BYPASSED_IPS"
 }
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -152,7 +158,7 @@ function Get-NetworkAddresses {
         $interface
     )    
     # Obtém a tabela de rotas
-    $routes = Get-NetRoute | Where-Object { $_.ifindex -ne $interface }
+    $routes = Get-NetRoute #| Where-Object { $_.ifindex -ne $interface }
 
     # Lista para armazenar os endereços de rede
     $networkAddresses = @()
@@ -224,6 +230,8 @@ function Get-DefaultGateway {
     return $null
 }
 
+Write-LogMessage -Message "Coletando Informações das Interfaces..."
+
 $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
@@ -239,10 +247,14 @@ else {
     $local = $localEth
 }
 
+$addresses = Get-NetworkAddresses  $local.IfaceId
+
+Write-LogMessage -Message "Informações das Interfaces coletadas!"
+
 
 # Remover IPs Publicos 
 
-$addresses = Get-NetworkAddresses  $local.IfaceId
+
 #$publicIPs = Get-PublicIPAddresses -Addresses $addresses
 
 Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
@@ -253,20 +265,32 @@ Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
 # }
 
 foreach ($ipAddress in $permitedList) {
-    Write-LogMessage -Message "Atualizando Rotas para $ipAddress"
-    route delete $ipAddress | Out-Null
-    route ADD $ipAddress MASK 255.255.255.255 $defaultGateway METRIC 1 IF $local.IfaceId 
+    $ipAddressNotExists = [string]::IsNullOrEmpty($ipAddress)
+    if ($ipAddressNotExists){
+        break
+    }
+    Write-LogMessage -Message "Atualizando Rota para $ipAddress"
+    if ($addresses -contains $ipAddress) {
+        route delete $ipAddress | Out-Null
+        Write-LogMessage -Message "Rota $ipAddress Removida!"
+    }    
+    route ADD $ipAddress MASK 255.255.255.255 $defaultGateway METRIC 1 IF $local.IfaceId | Out-Null
+    Write-LogMessage -Message "Rota $ipAddress Adicionada!"
 }
 
-Write-LogMessage -Message "Rotas atualizadas!"
+Write-LogMessage -Message "Rotas para IPs Permitidos atualizadas!"
 
 
 # Ajusta Rede Local
 
 Write-LogMessage -Message "Ajuste de Rotas da Rede Local..."
 
-route delete $local.NetAddress | Out-Null
+if ($addresses -contains $local.NetAddress) {
+    route delete $local.NetAddress | Out-Null
+    Write-LogMessage -Message "Rota $($local.NetAddress) Removida!"
+}
 route ADD $local.NetAddress MASK $local.Mask 0.0.0.0 METRIC 1 IF $local.IfaceId | Out-Null
+Write-LogMessage -Message "Rota $($local.NetAddress) Adicionada!"
 
 Write-LogMessage -Message "Rotas da Rede Local ajustadas!"
 
@@ -275,13 +299,30 @@ Write-LogMessage -Message "Rotas da Rede Local ajustadas!"
 
 Write-LogMessage -Message "Ajuste de Rotas WSL..."
 
-route delete $wsl.NetAddress | Out-Null
-route delete $wsl.IpAddress | Out-Null
-route delete $wsl.BroadcastAddress | Out-Null
+if ($addresses -contains $wsl.BroadcastAddress) {
+    route delete $wsl.BroadcastAddress | Out-Null
+    Write-LogMessage -Message "Rota $($wsl.BroadcastAddress) Removida!"
+}
+
+if ($addresses -contains $wsl.NetAddress) {
+    route delete $wsl.NetAddress | Out-Null
+    Write-LogMessage -Message "Rota $($wsl.NetAddress) Removida!"
+}
+
+if ($addresses -contains $wsl.IpAddress) {
+    route delete $wsl.IpAddress | Out-Null
+    Write-LogMessage -Message "Rota $($wsl.IpAddress) Removida!"
+}
+
+route ADD $wsl.BroadcastAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId | Out-Null
+Write-LogMessage -Message "Rota $($wsl.BroadcastAddress) Adicionada!"
 
 route ADD $wsl.NetAddress MASK $wsl.Mask 0.0.0.0 IF $wsl.IfaceId | Out-Null
+Write-LogMessage -Message "Rota $($wsl.Mask) Adicionada!"
+
 route ADD $wsl.IpAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId | Out-Null
-route ADD $wsl.BroadcastAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId | Out-Null
+Write-LogMessage -Message "Rota $($wsl.IpAddress) Adicionada!"
+
 
 Write-LogMessage -Message "Rotas WSL ajustadas!"
 
