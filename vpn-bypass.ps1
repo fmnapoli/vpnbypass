@@ -1,4 +1,8 @@
-﻿$VPN_BYPASSED_IPS = "189.126.135.50,181.41.180.91,181.41.180.123"
+﻿$VPN_BYPASSED_IPS = "189.126.135.50,181.41.180.91,181.41.180.123,181.41.180.113"
+
+if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))){
+	$VPN_BYPASSED_IPS = $VPN_BYPASSED_IPS + ",$env:VPN_BYPASSED_IPS"
+}
 
 $ErrorActionPreference = "SilentlyContinue"
 
