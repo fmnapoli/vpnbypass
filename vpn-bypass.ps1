@@ -1,7 +1,7 @@
 ﻿$VPN_BYPASSED_IPS = ""
-$VPN_BYPASS_PUBLIC_IPS = "FALSE" #TRUE/FALSE
+$VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
-$VPN_ADAPTER_NAME = "VPN"
+$VPN_PROFILE_NAME = "VPN"
 
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
@@ -23,8 +23,6 @@ if (-not([string]::IsNullOrEmpty($env:VPN_DOMAINS_NOT_BYPASSED))) {
     }    
     $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED + "$sep$env:VPN_DOMAINS_NOT_BYPASSED"
 }
-
-
 
 $removePublicIPs = ($VPN_BYPASS_PUBLIC_IPS -eq "TRUE")
 
@@ -313,7 +311,7 @@ $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
 
-$vpnInterfaceAlias = Get-InterfaceAlias $VPN_ADAPTER_NAME
+$vpnInterfaceAlias = Get-InterfaceAlias $VPN_PROFILE_NAME
 
 $vpn = Get-IPV4-Info $vpnInterfaceAlias
 
