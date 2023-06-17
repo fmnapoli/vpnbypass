@@ -1,21 +1,30 @@
 ﻿$VPN_BYPASSED_IPS = ""
-$VPN_BYPASS_PUBLIC_IPS = "TRUE" #TRUE/FALSE
-$VPN_DOMAINS_NOT_BYPASSED = @()
+$VPN_BYPASS_PUBLIC_IPS = "FALSE" #TRUE/FALSE
+$VPN_DOMAINS_NOT_BYPASSED = ""
 $VPN_ADAPTER_NAME = "VPN"
 
-$sep = ","
-
-if (([string]::IsNullOrEmpty($VPN_BYPASSED_IPS))) {
-    $sep = ""
-}
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
+    $sep = ","
+    if (([string]::IsNullOrEmpty($VPN_BYPASSED_IPS))) {
+        $sep = ""
+    }    
     $VPN_BYPASSED_IPS = $VPN_BYPASSED_IPS + "$sep$env:VPN_BYPASSED_IPS"
 }
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASS_PUBLIC_IPS))) {
     $VPN_BYPASS_PUBLIC_IPS = $env:VPN_BYPASS_PUBLIC_IPS
 }
+
+if (-not([string]::IsNullOrEmpty($env:VPN_DOMAINS_NOT_BYPASSED))) {
+    $sep = ","
+    if (([string]::IsNullOrEmpty($VPN_DOMAINS_NOT_BYPASSED))) {
+        $sep = ""
+    }    
+    $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED + "$sep$env:VPN_DOMAINS_NOT_BYPASSED"
+}
+
+
 
 $removePublicIPs = ($VPN_BYPASS_PUBLIC_IPS -eq "TRUE")
 
@@ -294,7 +303,7 @@ function Add-notBypassedPublicIPs {
         $notBypassedPublicIPs
     )
     foreach ($ipAddress in $notBypassedPublicIPs) {
-        route ADD $ipAddress MASK 255.255.255.255 0.0.0.0 IF $vpn.IfaceId | Out-Null        
+        route ADD $ipAddress MASK 255.255.255.255 0.0.0.0 IF $vpn.IfaceId        
     }    
 }
 
@@ -325,7 +334,8 @@ Write-LogMessage -Message "Informações das Interfaces coletadas!"
 
 # Remover IPs Publicos 
 
-if ($removePublicIPs) {       
+if ($removePublicIPs) {   
+    $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED.Split(",")
     Remove-PublicIPs $addresses
     $notBypassedPublicIPs = Get-ResolvedIPs -Urls $VPN_DOMAINS_NOT_BYPASSED
     Write-LogMessage -Message "Adicionando IPs não Bypassed: $notBypassedPublicIPs"
@@ -359,7 +369,7 @@ Write-LogMessage -Message "Rotas para IPs Permitidos atualizadas!"
 Write-LogMessage -Message "Ajuste de Rotas da Rede Local..."
 
 if ($addresses -contains $local.NetAddress) {
-    route delete $local.NetAddress | Out-Null
+    route delete $local.NetAddress 
     Write-LogMessage -Message "Rota $($local.NetAddress) Removida!"
 }
 route ADD $local.NetAddress MASK $local.Mask 0.0.0.0 METRIC 1 IF $local.IfaceId | Out-Null
@@ -378,22 +388,22 @@ if ($addresses -contains $wsl.BroadcastAddress) {
 }
 
 if ($addresses -contains $wsl.NetAddress) {
-    route delete $wsl.NetAddress | Out-Null
+    route delete $wsl.NetAddress 
     Write-LogMessage -Message "Rota $($wsl.NetAddress) Removida!"
 }
 
 if ($addresses -contains $wsl.IpAddress) {
-    route delete $wsl.IpAddress | Out-Null
+    route delete $wsl.IpAddress 
     Write-LogMessage -Message "Rota $($wsl.IpAddress) Removida!"
 }
 
-route ADD $wsl.BroadcastAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId | Out-Null
+route ADD $wsl.BroadcastAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId 
 Write-LogMessage -Message "Rota $($wsl.BroadcastAddress) Adicionada!"
 
-route ADD $wsl.NetAddress MASK $wsl.Mask 0.0.0.0 IF $wsl.IfaceId | Out-Null
+route ADD $wsl.NetAddress MASK $wsl.Mask 0.0.0.0 IF $wsl.IfaceId 
 Write-LogMessage -Message "Rota $($wsl.Mask) Adicionada!"
 
-route ADD $wsl.IpAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId | Out-Null
+route ADD $wsl.IpAddress MASK 255.255.255.255 0.0.0.0 IF $wsl.IfaceId 
 Write-LogMessage -Message "Rota $($wsl.IpAddress) Adicionada!"
 
 
