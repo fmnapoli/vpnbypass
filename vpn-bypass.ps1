@@ -1,4 +1,7 @@
 ﻿$VPN_BYPASSED_IPS = ""
+$VPN_BYPASS_PUBLIC_IPS = "TRUE" #TRUE/FALSE
+$VPN_DOMAINS_NOT_BYPASSED = @()
+$VPN_ADAPTER_NAME = "VPN"
 
 $sep = ","
 
@@ -9,6 +12,12 @@ if (([string]::IsNullOrEmpty($VPN_BYPASSED_IPS))) {
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
     $VPN_BYPASSED_IPS = $VPN_BYPASSED_IPS + "$sep$env:VPN_BYPASSED_IPS"
 }
+
+if (-not([string]::IsNullOrEmpty($env:VPN_BYPASS_PUBLIC_IPS))) {
+    $VPN_BYPASS_PUBLIC_IPS = $env:VPN_BYPASS_PUBLIC_IPS
+}
+
+$removePublicIPs = ($VPN_BYPASS_PUBLIC_IPS -eq "TRUE")
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -113,6 +122,23 @@ function Convert-Subnetmask {
         
     }
 }
+
+function Get-InterfaceAlias {
+    param (
+        [Parameter(Mandatory = $true)]
+        [string]$ProfileName
+    )
+
+    $connectionProfile = Get-NetConnectionProfile | Where-Object { $_.InterfaceAlias -match $ProfileName }
+
+    if ($connectionProfile) {
+        return $connectionProfile.InterfaceAlias
+    }
+    else {
+        Write-LogMessage "Não foi possível encontrar o perfil de conexão com o nome '$ProfileName'."
+    }
+}
+
 function Get-Interface {
     param (
         [string]$alias
@@ -154,11 +180,9 @@ function Get-IPV4-Info {
 }
 
 function Get-NetworkAddresses {
-    param(
-        $interface
-    )    
+  
     # Obtém a tabela de rotas
-    $routes = Get-NetRoute #| Where-Object { $_.ifindex -ne $interface }
+    $routes = Get-NetRoute 
 
     # Lista para armazenar os endereços de rede
     $networkAddresses = @()
@@ -190,6 +214,29 @@ function Test-PrivateIP {
     }    
 }
 
+function Get-ResolvedIPs {
+    param (
+        [Parameter(Mandatory = $true)]
+        [ValidateNotNullOrEmpty()]
+        [string[]]$Urls
+    )
+
+    $resolvedIPs = @()
+
+    foreach ($url in $Urls) {
+        try {
+            $resolved = Resolve-DnsName -Name $url -ErrorAction Stop
+            $ip = $resolved.IPAddress
+            $resolvedIPs += $ip
+        }
+        catch {
+            Write-LogMessage -LogLevel ERROR -Message "Falhar ao resolver IP para URL: $url"
+        }
+    }
+
+    return $resolvedIPs
+}
+
 function Get-PublicIPAddresses {
     param (
         [string[]] $Addresses
@@ -219,6 +266,19 @@ function Get-PublicIPAddresses {
     return $publicAddresses
 }
 
+function Remove-PublicIPs {
+    param (
+        $ipAddress
+    )
+
+    $publicIPs = Get-PublicIPAddresses -Addresses $ipAddress
+
+    foreach ($publicIP in $publicIPs) {
+        Write-LogMessage -Message "Removendo Rotas para $publicIP"
+        route delete $publicIP 
+    }   
+    
+}
 function Get-DefaultGateway {
     $routes = Get-NetRoute -AddressFamily IPv4
     $defaultRoute = $routes | Where-Object { $_.DestinationPrefix -eq '0.0.0.0/0' }
@@ -229,12 +289,24 @@ function Get-DefaultGateway {
     
     return $null
 }
+function Add-notBypassedPublicIPs {
+    param (
+        $notBypassedPublicIPs
+    )
+    foreach ($ipAddress in $notBypassedPublicIPs) {
+        route ADD $ipAddress MASK 255.255.255.255 0.0.0.0 IF $vpn.IfaceId | Out-Null        
+    }    
+}
 
 Write-LogMessage -Message "Coletando Informações das Interfaces..."
 
 $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
+
+$vpnInterfaceAlias = Get-InterfaceAlias $VPN_ADAPTER_NAME
+
+$vpn = Get-IPV4-Info $vpnInterfaceAlias
 
 $localEth = Get-IPV4-Info "Ethernet"
 $localWifi = Get-IPV4-Info "Wi-Fi"
@@ -247,26 +319,27 @@ else {
     $local = $localEth
 }
 
-$addresses = Get-NetworkAddresses  $local.IfaceId
-
+$addresses = $(Get-NetworkAddresses) | Where-Object { $_.ifindex -ne $local.IfaceId }
 Write-LogMessage -Message "Informações das Interfaces coletadas!"
 
 
 # Remover IPs Publicos 
 
+if ($removePublicIPs) {       
+    Remove-PublicIPs $addresses
+    $notBypassedPublicIPs = Get-ResolvedIPs -Urls $VPN_DOMAINS_NOT_BYPASSED
+    Write-LogMessage -Message "Adicionando IPs não Bypassed: $notBypassedPublicIPs"
+    Add-notBypassedPublicIPs $notBypassedPublicIPs
+}
 
-#$publicIPs = Get-PublicIPAddresses -Addresses $addresses
 
 Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
 
-# foreach ($publicIP in $publicIPs) {
-#     Write-LogMessage -Message "Removendo Rotas para $publicIP"
-#     route delete $publicIP | Out-Null
-# }
+
 
 foreach ($ipAddress in $permitedList) {
     $ipAddressNotExists = [string]::IsNullOrEmpty($ipAddress)
-    if ($ipAddressNotExists){
+    if ($ipAddressNotExists) {
         break
     }
     Write-LogMessage -Message "Atualizando Rota para $ipAddress"
