@@ -24,7 +24,6 @@ if (-not([string]::IsNullOrEmpty($env:VPN_DOMAINS_NOT_BYPASSED))) {
     $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED + "$sep$env:VPN_DOMAINS_NOT_BYPASSED"
 }
 
-$removePublicIPs = ($VPN_BYPASS_PUBLIC_IPS -eq "TRUE")
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -301,6 +300,7 @@ function Add-notBypassedPublicIPs {
         $notBypassedPublicIPs
     )
     foreach ($ipAddress in $notBypassedPublicIPs) {
+        Write-LogMessage -Message "Adicionando o IP não Bypassed: $ipAddress"
         route ADD $ipAddress MASK 255.255.255.255 0.0.0.0 IF $vpn.IfaceId        
     }    
 }
@@ -330,38 +330,6 @@ $addresses = $(Get-NetworkAddresses) | Where-Object { $_.ifindex -ne $local.Ifac
 Write-LogMessage -Message "Informações das Interfaces coletadas!"
 
 
-# Remover IPs Publicos 
-
-if ($removePublicIPs) {   
-    $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED.Split(",")
-    Remove-PublicIPs $addresses
-    $notBypassedPublicIPs = Get-ResolvedIPs -Urls $VPN_DOMAINS_NOT_BYPASSED
-    Write-LogMessage -Message "Adicionando IPs não Bypassed: $notBypassedPublicIPs"
-    Add-notBypassedPublicIPs $notBypassedPublicIPs
-}
-
-
-Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
-
-
-
-foreach ($ipAddress in $permitedList) {
-    $ipAddressNotExists = [string]::IsNullOrEmpty($ipAddress)
-    if ($ipAddressNotExists) {
-        break
-    }
-    Write-LogMessage -Message "Atualizando Rota para $ipAddress"
-    if ($addresses -contains $ipAddress) {
-        route delete $ipAddress | Out-Null
-        Write-LogMessage -Message "Rota $ipAddress Removida!"
-    }    
-    route ADD $ipAddress MASK 255.255.255.255 $defaultGateway METRIC 1 IF $local.IfaceId | Out-Null
-    Write-LogMessage -Message "Rota $ipAddress Adicionada!"
-}
-
-Write-LogMessage -Message "Rotas para IPs Permitidos atualizadas!"
-
-
 # Ajusta Rede Local
 
 Write-LogMessage -Message "Ajuste de Rotas da Rede Local..."
@@ -386,12 +354,12 @@ if ($addresses -contains $wsl.BroadcastAddress) {
 }
 
 if ($addresses -contains $wsl.NetAddress) {
-    route delete $wsl.NetAddress 
+    route delete $wsl.NetAddress | Out-Null
     Write-LogMessage -Message "Rota $($wsl.NetAddress) Removida!"
 }
 
 if ($addresses -contains $wsl.IpAddress) {
-    route delete $wsl.IpAddress 
+    route delete $wsl.IpAddress | Out-Null
     Write-LogMessage -Message "Rota $($wsl.IpAddress) Removida!"
 }
 
@@ -407,8 +375,40 @@ Write-LogMessage -Message "Rota $($wsl.IpAddress) Adicionada!"
 
 Write-LogMessage -Message "Rotas WSL ajustadas!"
 
+# Remover IPs Publicos 
+
+$removePublicIPs = ($VPN_BYPASS_PUBLIC_IPS -eq "TRUE")
+
+if ($removePublicIPs) {   
+    $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED.Split(",")
+    Remove-PublicIPs $addresses
+    $addresses = $(Get-NetworkAddresses) | Where-Object { $_.ifindex -ne $local.IfaceId }
+    $notBypassedPublicIPs = Get-ResolvedIPs -Urls $VPN_DOMAINS_NOT_BYPASSED    
+    Add-notBypassedPublicIPs $notBypassedPublicIPs
+}
+
+
+Write-LogMessage -Message "Atualizando Rotas para IPs Permitidos..."
+
+
+foreach ($ipAddress in $permitedList) {
+    $ipAddressNotExists = [string]::IsNullOrEmpty($ipAddress)
+    if ($ipAddressNotExists) {
+        break
+    }
+    Write-LogMessage -Message "Atualizando Rota para $ipAddress"
+    if ($addresses -contains $ipAddress) {
+        route delete $ipAddress | Out-Null
+        Write-LogMessage -Message "Rota $ipAddress Removida!"
+    }    
+    route ADD $ipAddress MASK 255.255.255.255 $defaultGateway METRIC 1 IF $local.IfaceId
+    Write-LogMessage -Message "Rota $ipAddress Adicionada!"
+}
+
+Write-LogMessage -Message "Rotas para IPs Permitidos atualizadas!"
+
 Write-LogMessage -Message "VPN Bypass finalizado!!!"
 
-Start-Sleep 5
+Start-Sleep 2335
 
 
