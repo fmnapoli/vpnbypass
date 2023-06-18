@@ -1,8 +1,14 @@
-﻿$VPN_BYPASSED_IPS = ""
+﻿# Verificar se o script está sendo executado como administrador
+if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    # Se não estiver sendo executado como administrador, reinicia o script com privilégios elevados
+    Start-Process -FilePath pwsh -Verb RunAs -ArgumentList "-File $($MyInvocation.MyCommand.Path)" #-Wait
+    exit
+}
+
+$VPN_BYPASSED_IPS = ""
 $VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
 $VPN_PROFILE_NAME = "VPN"
-
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
     $sep = ","
@@ -23,7 +29,6 @@ if (-not([string]::IsNullOrEmpty($env:VPN_DOMAINS_NOT_BYPASSED))) {
     }    
     $VPN_DOMAINS_NOT_BYPASSED = $VPN_DOMAINS_NOT_BYPASSED + "$sep$env:VPN_DOMAINS_NOT_BYPASSED"
 }
-
 
 $ErrorActionPreference = "SilentlyContinue"
 
@@ -409,6 +414,6 @@ Write-LogMessage -Message "Rotas para IPs Permitidos atualizadas!"
 
 Write-LogMessage -Message "VPN Bypass finalizado!!!"
 
-Start-Sleep 2335
+Start-Sleep 5
 
 
