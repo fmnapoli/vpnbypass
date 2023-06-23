@@ -8,7 +8,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 $VPN_BYPASSED_IPS = ""
 $VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
-$VPN_PROFILE_NAME = "VPN"
+# $VPN_PROFILE_NAME = "VPN" # F1
+$VPN_PROFILE_NAME = "Cloudflare"
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
     $sep = ","
