@@ -2,7 +2,7 @@
 
 ## Uso
 
-Executar com ppowershell 7 (pwsh) como Administrador
+Executar com powershell 7 (pwsh) como Administrador
 
 ## Efeitos
 
