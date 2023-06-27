@@ -6,9 +6,11 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 $VPN_BYPASSED_IPS = ""
+$VPN_NOT_BYPASSED_IPS = "173.245.48.0, 103.21.244.0, 103.22.200.0, 103.31.4.0, 141.101.64.0, 108.162.192.0, 190.93.240.0, 188.114.96.0, 197.234.240.0, 198.41.128.0, 162.158.0.0, 104.16.0.0, 104.24.0.0, 172.64.0.0, 131.0.72.0"
+$VPN_NOT_BYPASSED_IPS = $VPN_NOT_BYPASSED_IPS.Split(",")
 $VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
-# $VPN_PROFILE_NAME = "VPN" # F1
+$VPN_PROFILE_NAME = "VPN" # F1
 $VPN_PROFILE_NAME = "Cloudflare"
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
@@ -285,9 +287,11 @@ function Remove-PublicIPs {
 
     $publicIPs = Get-PublicIPAddresses -Addresses $ipAddress
 
-    foreach ($publicIP in $publicIPs) {
-        Write-LogMessage -Message "Removendo Rotas para $publicIP"
-        route delete $publicIP 
+    foreach ($publicIP in $publicIPs) {        
+        if ($publicIP -notin $VPN_NOT_BYPASSED_IPS ) {
+            Write-LogMessage -Message "Removendo Rotas para $publicIP"
+            route delete $publicIP 
+        }        
     }   
     
 }
@@ -316,6 +320,7 @@ Write-LogMessage -Message "Coletando Informações das Interfaces..."
 $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
+
 
 $vpnInterfaceAlias = Get-InterfaceAlias $VPN_PROFILE_NAME
 
