@@ -8,11 +8,8 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 $VPN_BYPASSED_IPS = ""
 $VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
-$VPN_NOT_BYPASSED_IPS = "173.245.48.0, 103.21.244.0, 103.22.200.0, 103.31.4.0, 141.101.64.0, 108.162.192.0, 190.93.240.0, 188.114.96.0, 197.234.240.0, 198.41.128.0, 162.158.0.0, 104.16.0.0, 104.24.0.0, 172.64.0.0, 131.0.72.0"
 $VPN_NOT_BYPASSED_IPS = ""
 $VPN_NOT_BYPASSED_IPS = $VPN_NOT_BYPASSED_IPS.Split(",")
-$VPN_PROFILE_NAME = "VPN" # F1
-#$VPN_PROFILE_NAME = "Cloudflare"
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
     $sep = ","
@@ -358,14 +355,49 @@ function Add-notBypassedPublicIPs {
     }    
 }
 
-Write-LogMessage -Message "Coletando Informações das Interfaces..."
 
-Get-NetConnectionProfile
+function ConfirmOrChangeVPNBypassSetting {
+    # Obtém o valor atual da variável de ambiente
+    $VPN_BYPASS_PUBLIC_IPS = [System.Environment]::GetEnvironmentVariable("VPN_BYPASS_PUBLIC_IPS", "Machine")
+
+    if ([string]::IsNullOrEmpty($VPN_BYPASS_PUBLIC_IPS)) {
+        [System.Environment]::SetEnvironmentVariable("VPN_BYPASS_PUBLIC_IPS", 'FALSE', "Machine")
+        $VPN_BYPASS_PUBLIC_IPS = "FALSE"
+    }
+
+    # Imprime o valor atual
+    Write-Host "O valor atual de VPN_BYPASS_PUBLIC_IPS é: $VPN_BYPASS_PUBLIC_IPS"
+
+    # Pede ao usuário para confirmar o valor atual
+    $userInput = Read-Host -Prompt 'Você deseja continuar com este valor? (S/N) [S]' 
+
+    # Se o usuário não fornecer uma entrada (apertar Enter), considera como 'S'
+    if ($userInput -eq '') {
+        $userInput = 'S'
+    }
+
+    # Se o usuário responder com 'N' ou 'n', então muda o valor
+    if ($userInput -eq 'N' -or $userInput -eq 'n') {
+        # Troca o valor e salva na variável de ambiente
+        if ($VPN_BYPASS_PUBLIC_IPS -eq 'TRUE') {
+            [System.Environment]::SetEnvironmentVariable("VPN_BYPASS_PUBLIC_IPS", 'FALSE', "Machine")
+        } else {
+            [System.Environment]::SetEnvironmentVariable("VPN_BYPASS_PUBLIC_IPS", 'TRUE', "Machine")
+        }
+
+        Write-Host "O valor de VPN_BYPASS_PUBLIC_IPS foi alterado para: $([System.Environment]::GetEnvironmentVariable('VPN_BYPASS_PUBLIC_IPS', 'Machine'))"
+    } else {
+        Write-Host "O valor de VPN_BYPASS_PUBLIC_IPS não foi alterado."
+    }
+}
+
+
+
+Write-LogMessage -Message "Coletando Informações das Interfaces..."
 
 $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
-
 
 $vpnInterfaceAlias =  $(Get-InterfaceWithMostIPv4Routes).name
 
@@ -386,18 +418,57 @@ else {
 
 $addresses = $(Get-NetworkAddresses) | Where-Object { $_.ifindex -ne $local.IfaceId }
 
+$ipExterno = $(Invoke-WebRequest -Uri https://ifconfig.me/ip).Content
 
-$ipExterno = $(curl ifconfig.me) 
-
-Write-LogMessage -Message "Endereço IP Externo: $ipExterno"
-Write-LogMessage -Message "Endereço IP da Interface Local: $($local['IpAddress'])"
-Write-LogMessage -Message "Endereço IP da Interface WSL: $($wsl['IpAddress'])"
-Write-LogMessage -Message "Endereço IP da Interface VPN ($vpnName): $($vpn['IpAddress'])"
-Write-LogMessage -Message "Gateway Padrão: $defaultGateway"
-
-
+"2023-07-24 11:32:41.525 [INFO] - Coletando Informações das Interfaces..."
+Write-Host ""
+Write-Host "================================================================================"
+Write-Host ""
+Write-Host "VPN Ativa: $vpnName "
+Write-Host "Endereço IP Externo: $ipExterno"
+Write-Host "Endereço IP da Interface Local: $($local['IpAddress'])"
+Write-Host "Endereço IP da Interface WSL: $($wsl['IpAddress'])"
+Write-Host "Endereço IP da Interface VPN ($vpnName): $($vpn['IpAddress'])"
+Write-Host "Gateway Padrão: $defaultGateway"
+Write-Host ""
+Write-Host "================================================================================"
+Write-Host ""
 Write-LogMessage -Message "Informações das Interfaces coletadas!"
+Write-Host ""
+Write-Host "================================================================================"
 
+if ($vpnName -eq "None") {
+    Write-Host ""
+    Write-Host "================================================================================"
+    Write-Host ""    
+    Write-LogMessage -Message "Nenhuma VPN ativa!"
+    Write-LogMessage -Message "Encerrando VPN ByPass..."
+    Write-Host ""
+    Write-Host "================================================================================"
+    Write-Host ""        
+    Start-Sleep 5
+    Exit 0
+}
+
+Write-Host ""
+ConfirmOrChangeVPNBypassSetting
+Write-Host ""
+Write-Host "================================================================================"
+Write-Host ""
+Write-LogMessage -Message "Coletando Configurações..."
+Write-Host ""
+Write-Host "================================================================================"
+Write-Host ""
+Write-Host "VPN_BYPASSED_IPS: $VPN_BYPASSED_IPS"
+Write-Host "VPN_BYPASS_PUBLIC_IPS: $VPN_BYPASS_PUBLIC_IPS"
+Write-Host "VPN_DOMAINS_NOT_BYPASSED: $VPN_DOMAINS_NOT_BYPASSED"
+Write-Host "VPN_NOT_BYPASSED_IPS:$VPN_NOT_BYPASSED_IPS"
+Write-Host ""
+Write-Host "================================================================================"
+Write-Host ""
+
+
+$VPN_BYPASS_PUBLIC_IPS = [System.Environment]::GetEnvironmentVariable("VPN_BYPASS_PUBLIC_IPS", "Machine")
 
 # Ajusta Rede Local
 
