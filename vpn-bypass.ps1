@@ -6,12 +6,13 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 }
 
 $VPN_BYPASSED_IPS = ""
-$VPN_NOT_BYPASSED_IPS = "173.245.48.0, 103.21.244.0, 103.22.200.0, 103.31.4.0, 141.101.64.0, 108.162.192.0, 190.93.240.0, 188.114.96.0, 197.234.240.0, 198.41.128.0, 162.158.0.0, 104.16.0.0, 104.24.0.0, 172.64.0.0, 131.0.72.0"
-$VPN_NOT_BYPASSED_IPS = $VPN_NOT_BYPASSED_IPS.Split(",")
 $VPN_BYPASS_PUBLIC_IPS = "FALSE"
 $VPN_DOMAINS_NOT_BYPASSED = ""
+$VPN_NOT_BYPASSED_IPS = "173.245.48.0, 103.21.244.0, 103.22.200.0, 103.31.4.0, 141.101.64.0, 108.162.192.0, 190.93.240.0, 188.114.96.0, 197.234.240.0, 198.41.128.0, 162.158.0.0, 104.16.0.0, 104.24.0.0, 172.64.0.0, 131.0.72.0"
+$VPN_NOT_BYPASSED_IPS = ""
+$VPN_NOT_BYPASSED_IPS = $VPN_NOT_BYPASSED_IPS.Split(",")
 $VPN_PROFILE_NAME = "VPN" # F1
-$VPN_PROFILE_NAME = "Cloudflare"
+#$VPN_PROFILE_NAME = "Cloudflare"
 
 if (-not([string]::IsNullOrEmpty($env:VPN_BYPASSED_IPS))) {
     $sep = ","
@@ -34,6 +35,48 @@ if (-not([string]::IsNullOrEmpty($env:VPN_DOMAINS_NOT_BYPASSED))) {
 }
 
 $ErrorActionPreference = "SilentlyContinue"
+
+function Get-InterfaceWithMostIPv4Routes {
+    # Obtém todos os perfis de conexão
+    $interfaces = Get-NetConnectionProfile | Select-Object -ExpandProperty InterfaceAlias
+
+    # Obtém todas as rotas
+    $routes = Get-NetRoute -AddressFamily IPv4
+
+    # Agrupa as rotas por InterfaceAlias e conta o número de rotas por interface
+    $routeCounts = $routes | Group-Object InterfaceAlias | Select-Object Count, Name
+
+    # Filtra a lista de contagens de rotas para incluir apenas as interfaces que também estão presentes na saída do Get-NetConnectionProfile
+    $filteredRouteCounts = $routeCounts | Where-Object { $interfaces -contains $_.Name }
+
+    # Mostra na tela
+
+    #$filteredRouteCounts | Format-Table -Property Name, Count -AutoSize
+
+    # Obtém a interface com o maior número de rotas
+    $maxRoutesInterface = $filteredRouteCounts | Sort-Object Count -Descending | Select-Object -First 1
+
+    # Retorna a interface com o maior número de rotas
+    return $maxRoutesInterface
+}
+
+function Get-VPNName {
+    param (
+        $interfaceAlias
+    )
+
+    $vpnName = "None"
+
+    if ($interfaceAlias -match ("REMOTE_VPN_")) {
+        return "BigIP"
+    }
+
+    if ($interfaceAlias -match ("CloudflareWARP")) {
+        return "CloudflareWARP"
+    }
+
+    return $vpnName    
+}
 
 function Write-LogMessage {
     param (
@@ -317,12 +360,16 @@ function Add-notBypassedPublicIPs {
 
 Write-LogMessage -Message "Coletando Informações das Interfaces..."
 
+Get-NetConnectionProfile
+
 $defaultGateway = Get-DefaultGateway
 
 $permitedList = $VPN_BYPASSED_IPS.Split(",")
 
 
-$vpnInterfaceAlias = Get-InterfaceAlias $VPN_PROFILE_NAME
+$vpnInterfaceAlias =  $(Get-InterfaceWithMostIPv4Routes).name
+
+$vpnName = Get-VPNName $vpnInterfaceAlias
 
 $vpn = Get-IPV4-Info $vpnInterfaceAlias
 
@@ -338,6 +385,17 @@ else {
 }
 
 $addresses = $(Get-NetworkAddresses) | Where-Object { $_.ifindex -ne $local.IfaceId }
+
+
+$ipExterno = $(curl ifconfig.me) 
+
+Write-LogMessage -Message "Endereço IP Externo: $ipExterno"
+Write-LogMessage -Message "Endereço IP da Interface Local: $($local['IpAddress'])"
+Write-LogMessage -Message "Endereço IP da Interface WSL: $($wsl['IpAddress'])"
+Write-LogMessage -Message "Endereço IP da Interface VPN ($vpnName): $($vpn['IpAddress'])"
+Write-LogMessage -Message "Gateway Padrão: $defaultGateway"
+
+
 Write-LogMessage -Message "Informações das Interfaces coletadas!"
 
 
